@@ -18,6 +18,8 @@
 
 use strict;
 use File::Basename;
+use File::Temp qw(tempdir);
+use File::Path qw(make_path remove_tree);
 use Cwd;
 
 sub safe_cmd {
@@ -99,7 +101,7 @@ sub parse_cmd(@)
         my $commit1 = shift(@args);
 
         if ($commit1 =~ m/^(.*)\.\.\.(.*)$/) {
-            my $branch_2 = $2 == "" ? "HEAD" : $2;
+            my $branch_2 = $2 eq "" ? "HEAD" : $2;
             $source_tree = trim(safe_cmd("git merge-base $1 $branch_2"));
             $dest_tree = $2;
         }
@@ -162,7 +164,7 @@ sub link_files_working_dir($$) {
     # TODO: Fix this so we don't have to loop over each filename somehow
     foreach my $filename (@$file_list) {
         my $dir = $filename;
-        safe_system("mkdir", "-p", dirname("$out_dir/$filename"));
+        make_path(dirname("$out_dir/$filename"));
         safe_system("ln", "-s", cwd() . "/$filename", "$out_dir/$filename");
     }
 }
@@ -190,12 +192,12 @@ if ($git_dir eq "") {
 	$git_dir = ".";
 }
 
-my $tmp_dir=trim(safe_cmd("mktemp -d -t git-meld.XXXXXX"));
+my $tmp_dir= tempdir("git-meld.XXXXXX", TMPDIR => 1);
 my $source_dir  = "$tmp_dir/" . (($source_tree eq "") ? "staging_area" : $source_tree);
 my $dest_dir = "$tmp_dir/" . (($dest_tree eq "") ? "working_dir" : $dest_tree);
 
-safe_system("mkdir -p $source_dir");
-safe_system("mkdir -p $dest_dir");
+make_path($source_dir);
+make_path($dest_dir);
 
 my $src_changed_files = nul_seperated_string_to_list(safe_cmd("git diff -z --diff-filter=DMTUXB --name-only $all_args"));
 my $dest_changed_files = nul_seperated_string_to_list(safe_cmd("git diff -z --diff-filter=ACMTUXB --name-only $all_args"));
@@ -224,5 +226,4 @@ my $cmd = get_config_or_default("treediff.$tool.cmd", $tool);
 my $path = get_config_or_default("treediff.$tool.path", "");
 safe_system("$path$cmd", "$source_dir", "$dest_dir");
 
-safe_system("chmod", "-R", "u+w", "$tmp_dir/");
-safe_system("rm", "-Rf", $tmp_dir);
+remove_tree($tmp_dir);
